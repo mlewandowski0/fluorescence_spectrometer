@@ -33,6 +33,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define false 0
+#define true  1
+typedef int bool;
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -59,10 +63,27 @@ int st = 0;
 #define ATIME_ADDR      0x81
 #define ASTEP_ADDR_LSB  0xCA
 #define ASTEP_ADDR_MSB  0xCB
+#define CFG0_ADDR       0xA9
+#define LED_ADDR        0x74
+#define AS7341_CFG6     0xAF
+#define AS7341_STATUS2  0xA3
+#define AS7341_CH0_DATA_L     0x95 
+
+#define CFG0_VAL_REG0         0b00000000  //  REGISTER BANK >= 0x80
+#define CFG0_VAL_REG1         0b00010000  //  REGISTER BANK 0x60 - 0x74   
+#define TURN_ON_LED           0b00001000  // TURN LED ON
+#define TURN_OFF_LED          0b00000000  // TURN LED ON
+#define LED_VAL               0b10000100  // LED POWER CONTROL
+#define ENABLE_VAL            0b00000011  // POWER, SPM ENABLED | SMUX WAIT, FLICKER DISABLED
+#define SMUX_ENABLE           0b00010011  // POWER, SPM, SMUX ENABLED |  WAIT, FLICKER DISABLED
+#define SPM_ON                0b00000011
+#define SPM_OFF               0b00000001
+#define AS7341_SMUX_CMD_WRITE 0b00000010
+
 
 uint8_t d1[1] = {"\x92"};
-uint8_t d2[1] = {0b01000011};
 uint8_t buffor[1];
+uint8_t reading[24];
 HAL_StatusTypeDef res;
 
 
@@ -85,33 +106,196 @@ void MX_USB_HOST_Process(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+HAL_StatusTypeDef writeRegisterByte(I2C_HandleTypeDef *hi2c, uint8_t address, uint8_t value)
+{
+  buffor[0] = value;
+  res = HAL_I2C_Mem_Write_IT(hi2c, SPECTR_ADDR, address, 1,buffor,  1);
+  if (res != HAL_OK)
+    HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_SET);
+  return res;
+}
+void setup_F1F4_Clear_NIR(I2C_HandleTypeDef *hi2c)
+{
+  writeRegisterByte(hi2c, 0x00, 0x30);  // F3 left set to ADC2
+  writeRegisterByte(hi2c, 0x01, 0x01);  // F1 left set to ADC0
+  writeRegisterByte(hi2c, 0x02, 0x00);  // Reserved or disabled
+  writeRegisterByte(hi2c, 0x03, 0x00);  // F8 left disabled
+  writeRegisterByte(hi2c, 0x04, 0x00);  // F6 left disabled
+  writeRegisterByte(hi2c, 0x05, 0x42);  // F4 left connected to ADC3/f2 left connected to ADC1
+  writeRegisterByte(hi2c, 0x06, 0x00);  // F5 left disabled
+  writeRegisterByte(hi2c, 0x07, 0x00);  // F7 left disabled
+  writeRegisterByte(hi2c, 0x08, 0x50);  // CLEAR connected to ADC4
+  writeRegisterByte(hi2c, 0x09, 0x00);  // F5 right disabled
+  writeRegisterByte(hi2c, 0x0A, 0x00);  // F7 right disabled
+  writeRegisterByte(hi2c, 0x0B, 0x00);  // Reserved or disabled
+  writeRegisterByte(hi2c, 0x0C, 0x20);  // F2 right connected to ADC1
+  writeRegisterByte(hi2c, 0x0D, 0x04);  // F4 right connected to ADC3
+  writeRegisterByte(hi2c, 0x0E, 0x00);  // F6/F8 right disabled
+  writeRegisterByte(hi2c, 0x0F, 0x30);  // F3 right connected to ADC2
+  writeRegisterByte(hi2c, 0x10, 0x01);  // F1 right connected to ADC0
+  writeRegisterByte(hi2c, 0x11, 0x50);  // CLEAR right connected to ADC4
+  writeRegisterByte(hi2c, 0x12, 0x00);  // Reserved or disabled
+  writeRegisterByte(hi2c, 0x13, 0x06);  // NIR connected to ADC5
+}
+void setup_F5F8_Clear_NIR(I2C_HandleTypeDef *hi2c)
+{
+  writeRegisterByte(hi2c, 0x00, 0x00); // F3 left disable
+  writeRegisterByte(hi2c, 0x01, 0x00); // F1 left disable
+  writeRegisterByte(hi2c, 0x02, 0x00); // reserved/disable
+  writeRegisterByte(hi2c, 0x03, 0x40); // F8 left connected to ADC3
+  writeRegisterByte(hi2c, 0x04, 0x02); // F6 left connected to ADC1
+  writeRegisterByte(hi2c, 0x05, 0x00); // F4/ F2 disabled
+  writeRegisterByte(hi2c, 0x06, 0x10); // F5 left connected to ADC0
+  writeRegisterByte(hi2c, 0x07, 0x03); // F7 left connected to ADC2
+  writeRegisterByte(hi2c, 0x08, 0x50); // CLEAR Connected to ADC4
+  writeRegisterByte(hi2c, 0x09, 0x10); // F5 right connected to ADC0
+  writeRegisterByte(hi2c, 0x0A, 0x03); // F7 right connected to ADC2
+  writeRegisterByte(hi2c, 0x0B, 0x00); // Reserved or disabled
+  writeRegisterByte(hi2c, 0x0C, 0x00); // F2 right disabled
+  writeRegisterByte(hi2c, 0x0D, 0x00); // F4 right disabled
+  writeRegisterByte(hi2c, 0x0E, 0x24); // F8 right connected to ADC2/ F6 right connected to ADC1
+  writeRegisterByte(hi2c, 0x0F, 0x00); // F3 right disabled
+  writeRegisterByte(hi2c, 0x10, 0x00); // F1 right disabled
+  writeRegisterByte(hi2c, 0x11, 0x50); // CLEAR right connected to AD4
+  writeRegisterByte(hi2c, 0x12, 0x00); // Reserved or disabled
+  writeRegisterByte(hi2c, 0x13, 0x06); // NIR connected to ADC5
+}
 HAL_StatusTypeDef getID(I2C_HandleTypeDef *hi2c, uint8_t *data)
 {
   return HAL_I2C_Mem_Read(&hi2c1, SPECTR_ADDR, WHOAMI_ADRR, 1, d1, 1, HAL_MAX_DELAY);
 }
-
 HAL_StatusTypeDef setupIntegration(I2C_HandleTypeDef *hi2c, uint8_t ATIME, uint16_t ASTEP)
 {
   uint16_t ASTEP_LSB = ASTEP & 0xff; 
   uint16_t ASTEP_MSB = (ASTEP >> 8);
 
   buffor[0] = ATIME;
-  res = HAL_I2C_Mem_Write(&hi2c, SPECTR_ADDR, ATIME_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, ATIME_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
   if (res != HAL_OK)
     return res;
   
   buffor[0] = (uint8_t)ASTEP_LSB;
-  res = HAL_I2C_Mem_Write(&hi2c, SPECTR_ADDR, ASTEP_ADDR_LSB, 1, buffor, 1, HAL_MAX_DELAY);
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, ASTEP_ADDR_LSB, 1, buffor, 1, HAL_MAX_DELAY);
   if (res != HAL_OK)
     return res;
 
   buffor[0] = (uint8_t)ASTEP_MSB;
-  res = HAL_I2C_Mem_Write(&hi2c, SPECTR_ADDR, ASTEP_ADDR_MSB, 1, buffor, 1, HAL_MAX_DELAY);
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, ASTEP_ADDR_MSB, 1, buffor, 1, HAL_MAX_DELAY);
   if (res != HAL_OK)
     return res;
+
+  return HAL_OK;
+}
+HAL_StatusTypeDef chipEnable(I2C_HandleTypeDef *hi2c)
+{
+  // SMUX, POWER, SPM ENABLED | WAIT, FLICKER DISABLED
+  buffor[0] = (uint8_t)ENABLE_VAL;
+  return HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, ENABLE_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+}
+HAL_StatusTypeDef turnOnLED(I2C_HandleTypeDef *hi2c)
+{
+  buffor[0] = CFG0_VAL_REG1;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, CFG0_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  buffor[0] = TURN_ON_LED;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, CONFIG_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  buffor[0] = LED_VAL;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, LED_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  return HAL_OK;
+}
+HAL_StatusTypeDef turnOffLED(I2C_HandleTypeDef *hi2c)
+{
+  buffor[0] = CFG0_VAL_REG1;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, CFG0_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  buffor[0] = TURN_OFF_LED;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, CONFIG_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  buffor[0] = 0;
+  res = HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, LED_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+  if (res != HAL_OK)
+    return res;
+
+  return HAL_OK;
+}
+HAL_StatusTypeDef enableSpectralMeasurement(I2C_HandleTypeDef *hi2c, bool enable)
+{
+  if (enable)
+    buffor[0] = SPM_ON;
+  else
+    buffor[0] = SPM_OFF;
+  return HAL_I2C_Mem_Write(hi2c, SPECTR_ADDR, ENABLE_ADDR, 1, buffor, 1, HAL_MAX_DELAY);
+}
+void setSMUXCommand(I2C_HandleTypeDef *hi2c, uint8_t command)
+{
+  writeRegisterByte(hi2c, AS7341_CFG6, command);
+}
+HAL_StatusTypeDef enableSMUX(I2C_HandleTypeDef *hi2c)
+{
+    return writeRegisterByte(hi2c, ENABLE_ADDR, SMUX_ENABLE);
+}
+void setSMUXLowChannels(I2C_HandleTypeDef *hi2c, bool f1_f4)
+{ 
+  enableSpectralMeasurement(hi2c, false);
+  setSMUXLowChannels(hi2c, AS7341_SMUX_CMD_WRITE);
+  if (f1_f4)
+  {
+    setup_F1F4_Clear_NIR(hi2c);
+  }
+  else
+  {
+    setup_F5F8_Clear_NIR(hi2c);
+  }
+
+  if (enableSMUX(hi2c) != HAL_OK)
+    HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_SET);
+}
+bool isDataReady(I2C_HandleTypeDef *hi2c)
+{
+  if (HAL_I2C_Mem_Read(hi2c, SPECTR_ADDR, AS7341_STATUS2, 1, buffor, 1, HAL_MAX_DELAY) != HAL_OK)
+    HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_SET);
+
+  return (buffor[0] >> 6) & 1;
+}
+void waitForData(I2C_HandleTypeDef *hi2c)
+{
+  HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_SET);
+  while(! isDataReady(hi2c))
+  {}
+  HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_RESET);
+}
+void readAllChannel(I2C_HandleTypeDef *hi2c)
+{
+  setSMUXLowChannels(hi2c, true);
+  enableSpectralMeasurement(hi2c, true);
+  waitForData(hi2c);
+
+  if (HAL_I2C_Mem_Read(hi2c, SPECTR_ADDR, AS7341_CH0_DATA_L, 1, reading, 12, HAL_MAX_DELAY) != HAL_OK)
+  {
+    HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_SET);
+  }
 }
 
-HAL_StatusTypeDef chip_enable()
+/*
+*
+*   LD6 BLUE   LED
+*   LD5 RED    LED
+*   LD4 ORANGE LED
+*   LD3 GREEN  LED
+*
+*/
 
 
 /* USER CODE END 0 */
@@ -152,12 +336,22 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
   /* USER CODE END 2 */
-  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+  HAL_Delay(1);
+  if (getID(&hi2c1, d1) != HAL_OK)
+      HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
 
   if (getID(&hi2c1, d1) != HAL_OK)
-  {
-      HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_SET);
-  }
+      HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+
+  if (chipEnable(&hi2c1) != HAL_OK)
+    HAL_GPIO_WritePin(LD5_GPIO_Port, LD5_Pin, GPIO_PIN_SET);
+
+  if (turnOnLED(&hi2c1) != HAL_OK)
+    HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_SET);
+
+  HAL_Delay(200);
+  if (turnOffLED(&hi2c1) != HAL_OK)
+    HAL_GPIO_WritePin(LD6_GPIO_Port, LD6_Pin, GPIO_PIN_SET);
 
 //  if (HAL_I2C_Mem_Write(&hi2c1, SPECTR_ADDR, 0x80, 1, d2, 1, HAL_MAX_DELAY) != HAL_OK)
 //  {
@@ -172,6 +366,7 @@ int main(void)
     if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET)
     {
       HAL_GPIO_WritePin(Toggle_f_GPIO_Port, Toggle_f_Pin, GPIO_PIN_RESET);
+      readAllChannel(&hi2c1);
     }
     else
     {
