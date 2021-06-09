@@ -1,0 +1,8 @@
+Removed Pin From Net: NetName=SDI Pin=R10-1
+Removed Pin From Net: NetName=SDO Pin=R11-1
+Removed Pin From Net: NetName=GND Pin=U2-9
+Added Component: Designator=J3(01x01_MALE)
+Added Pin To Net: NetName=NetJ3_1 Pin=J3-1
+Added Pin To Net: NetName=SDO Pin=R10-1
+Added Pin To Net: NetName=SDI Pin=R11-1
+Added Member To Class: ClassName=Sheet1 Member=Component J3 db_pin
